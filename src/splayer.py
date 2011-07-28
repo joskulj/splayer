@@ -16,11 +16,13 @@
 
 import os
 import os.path
+import sys
+import threading
 import time
 
 from pygame import mixer
 
-class MediaFile(Thread):
+class MediaFile(object):
     """
     class for a media file
     """
@@ -32,13 +34,10 @@ class MediaFile(Thread):
         - filename
         - directory
         """
-        Thread.__init__()
-        self._last_position = -5
-        self._position = -1
         self._playing = False
         if os.path.isfile(filename):
             self._directory = os.path.dirname(filename)
-            self._filename os.path.basename(filename)
+            self._filename = os.path.basename(filename)
         else:
             self._filename = filename
             if directory == None:
@@ -72,25 +71,40 @@ class MediaFile(Thread):
         if not self.is_playing():
             if self.exists():
                 mixer.init()
+                print self._path
                 mixer.music.load(self._path)
+                print "play"
                 mixer.music.play()
-                # start the thread
-                self.start()
+                # invoke play() for the second time to support
+                # playing MP3
+                mixer.music.play()
+                self._playing = True
+                last_position = mixer.music.get_pos()
                 time.sleep(2)
+                position = mixer.music.get_pos()
+                while self.is_playing() and last_position < position:
+                    time.sleep(2)
+                    if self.is_playing():  
+                        last_position = position
+                        position = mixer.music.get_pos()
+                        print position
 
-    def run(self):
-        """
-        thread function
-        """
-        while self.is_playing() and self._last_position < self._position:
-            time.sleep(2)
-            if self.is_playing():
-                self._last_position = self._position
-                self._position = mixer.music.get_pos()
-        self._last_position = -5
-        self._position = -1
-        self._playing = False
+def main(argv):
+    """
+    main function
+    """
+    l = len(argv)
+    if l < 2:
+        print "parameters missing."
+    else:
+        for i in range(1, l):
+            filename = argv[i]
+            mfile = MediaFile(filename)
+            if not mfile.exists():
+                print "file %s does not exists." % filename
+            else:
+                mfile.play()
 
 if __name__ == "__main__":
-    pass
+    main(sys.argv)
 
