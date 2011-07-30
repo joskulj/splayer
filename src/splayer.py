@@ -14,13 +14,14 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
+import gtk
+import gtk.gdk
+import gtk.glade
 import os
 import os.path
 import sys
 import threading
 import time
-
-from pygame import mixer
 
 class MediaFile(object):
     """
@@ -45,6 +46,21 @@ class MediaFile(object):
             else:
                 self._directory = directory
         self._path = os.path.join(self._directory, self._filename)
+        self._status_path = self.get_status_path(self._filename, self._directory)
+
+    def get_status_path(self, filename, directory):
+        """
+        returns the path of the status file
+        Parameters:
+        - filename
+          filename of the media file
+        - directory
+          directory of the media file
+        Returns:
+        - path of the status file
+        """
+        status_filename = ".%s.splayer" % filename
+        return os.path.join(directory, status_filename)
 
     def exists(self):
         """
@@ -68,43 +84,60 @@ class MediaFile(object):
         """
         plays the file
         """
-        if not self.is_playing():
-            if self.exists():
-                mixer.init()
-                print self._path
-                mixer.music.load(self._path)
-                print "play"
-                mixer.music.play()
-                # invoke play() for the second time to support
-                # playing MP3
-                mixer.music.play()
-                self._playing = True
-                last_position = mixer.music.get_pos()
-                time.sleep(2)
-                position = mixer.music.get_pos()
-                while self.is_playing() and last_position < position:
-                    time.sleep(2)
-                    if self.is_playing():  
-                        last_position = position
-                        position = mixer.music.get_pos()
-                        print position
+        pass
 
-def main(argv):
-    """
-    main function
-    """
-    l = len(argv)
-    if l < 2:
-        print "parameters missing."
-    else:
-        for i in range(1, l):
-            filename = argv[i]
-            mfile = MediaFile(filename)
-            if not mfile.exists():
-                print "file %s does not exists." % filename
-            else:
-                mfile.play()
+    def get_status(self):
+        """
+        Returns:
+        - current position from the status file
+        """
+        return 16.0
+
+    def update_status(self, duration):
+        pass
+
+    def remove_status(self):
+        pass
+
+class PlayerWindow(object):
+
+    def __init__(self):
+        """
+        creates an instance
+        """
+        self._widget_tree = self.init_widget_tree()
+ 
+    def init_widget_tree(self):
+        """
+        initializes the widget tree
+        Returns:
+        - created widget tree
+        """
+        gladefile = "splayer.glade"
+        windowname = "playerwindow"
+        widget_tree = gtk.glade.XML(gladefile, windowname)
+        # dic = {"on_mainwindow_destroy" : self.on_exit
+        # , "on_add_directory" : self.on_add_directory
+        # , "on_remove_directory" : self.on_remove_directory
+        # , "on_synchronize" : self.on_synchronize
+        # , "on_exit" : self.on_exit }
+        # widget_tree.signal_autoconnect(dic)
+        return widget_tree
+
+    def set_filename(self, filename):
+        """
+        sets the filename
+        Parameters:
+        - filename
+          filename to set
+        """
+        widget = self._widget_tree.get_widget("label_filename")
+        widget.set_text(filename)
+        print filename
 
 if __name__ == "__main__":
-    main(sys.argv)
-
+    # gtk.gdk.threads_init()
+    window = PlayerWindow()
+    if len(sys.argv) > 1:
+        window.set_filename(sys.argv[1])
+    gtk.main()
