@@ -116,12 +116,13 @@ class PlayerWindow(object):
         gladefile = "splayer.glade"
         windowname = "playerwindow"
         widget_tree = gtk.glade.XML(gladefile, windowname)
-        # dic = {"on_mainwindow_destroy" : self.on_exit
+        dic = {"on_playerwindow_destroy" : self.on_quit
+        , "on_quit" : self.on_quit }
         # , "on_add_directory" : self.on_add_directory
         # , "on_remove_directory" : self.on_remove_directory
         # , "on_synchronize" : self.on_synchronize
         # , "on_exit" : self.on_exit }
-        # widget_tree.signal_autoconnect(dic)
+        widget_tree.signal_autoconnect(dic)
         return widget_tree
 
     def set_filename(self, filename):
@@ -134,6 +135,43 @@ class PlayerWindow(object):
         widget = self._widget_tree.get_widget("label_filename")
         widget.set_text(filename)
         print filename
+
+    def on_open(self, widget):
+        """
+        handles the event to open a file
+        Parameters:
+        - widget
+          widget that triggered the event
+        """
+        print "on_open()"
+
+    def on_play_stop(self, widget):
+        """
+        handles the event to play or stop the media file
+        Parameters:
+        - widget
+          widget that triggered the event
+        """
+        print "on_play_stop()"
+
+    def on_reset(self, widget):
+        """
+        handles the event to reset the playing position
+        Parameters:
+        - widget
+          widget that triggered the event
+        """
+        print "on_reset()"
+
+    def on_quit(self, widget):
+        """
+        handles the event to quit the application
+        Parameters:
+        - widget
+          widget that triggered the event
+        """
+        print "on_quit()"
+
 
 if __name__ == "__main__":
     # gtk.gdk.threads_init()

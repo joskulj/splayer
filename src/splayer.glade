@@ -8,7 +8,7 @@
     <property name="visible">True</property>
     <property name="title" translatable="yes">splayer</property>
     <property name="window_position">center</property>
-    <signal name="destroy" handler="on_mainwindow_destroy"/>
+    <signal name="destroy" handler="on_quit"/>
     <child>
       <widget class="GtkVBox" id="vbox1">
         <property name="visible">True</property>
@@ -30,7 +30,7 @@
                         <property name="visible">True</property>
                         <property name="use_underline">True</property>
                         <property name="use_stock">True</property>
-                        <signal name="activate" handler="on_exit"/>
+                        <signal name="activate" handler="on_quit"/>
                       </widget>
                     </child>
                   </widget>
@@ -141,6 +141,7 @@
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
                 <property name="use_underline">True</property>
+                <signal name="clicked" handler="on_quit"/>
               </widget>
               <packing>
                 <property name="position">2</property>
