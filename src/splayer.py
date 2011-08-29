@@ -28,25 +28,34 @@ class MediaFile(object):
     class for a media file
     """
 
-    def __init__(self, filename, directory=None):
+    def __init__(self, filename):
         """
         creates an instance
         Parameters:
         - filename
-        - directory
+          filename of the media file
         """
         self._playing = False
-        if os.path.isfile(filename):
-            self._directory = os.path.dirname(filename)
-            self._filename = os.path.basename(filename)
-        else:
-            self._filename = filename
-            if directory == None:
-                self._directory = os.getcwd()
+        if filename != None:
+            if os.path.isfile(filename):
+                self._directory = os.path.dirname(filename)
+                self._filename = os.path.basename(filename)
             else:
-                self._directory = directory
-        self._path = os.path.join(self._directory, self._filename)
-        self._status_path = self.get_status_path(self._filename, self._directory)
+                self._filename = filename
+                self._directory = os.getcwd()
+            self._path = os.path.join(self._directory, self._filename)
+            # self._status_path = self.get_status_path(self._filename, self._directory)
+        else:
+            self._filename = None
+            self._directory = None
+            self._path = None
+
+    def get_filename(self):
+        """
+        Returns:
+        - filename of the media file
+        """
+        return self._filename
 
     def get_status_path(self, filename, directory):
         """
@@ -69,7 +78,10 @@ class MediaFile(object):
         - True:  file exists
         - False: file doesn't exists
         """
-        return os.path.isfile(self._path)
+        result = False
+        if self._path != None:
+            result = os.path.isfile(self._path)
+        return result
 
     def is_playing(self):
         """
@@ -105,7 +117,9 @@ class PlayerWindow(object):
         """
         creates an instance
         """
+        self._media_file = MediaFile(None)
         self._widget_tree = self.init_widget_tree()
+        self.update_widgets()
  
     def init_widget_tree(self):
         """
@@ -117,6 +131,8 @@ class PlayerWindow(object):
         windowname = "playerwindow"
         widget_tree = gtk.glade.XML(gladefile, windowname)
         dic = {"on_playerwindow_destroy" : self.on_quit
+        , "on_open" : self.on_open
+        , "on_play_stop" : self.on_play_stop
         , "on_quit" : self.on_quit }
         # , "on_add_directory" : self.on_add_directory
         # , "on_remove_directory" : self.on_remove_directory
@@ -125,6 +141,19 @@ class PlayerWindow(object):
         widget_tree.signal_autoconnect(dic)
         return widget_tree
 
+    def update_widgets(self):
+        """
+        updates the widgets of the window
+        """
+        play_button = self._widget_tree.get_widget("button_play_stop")
+        label = self._widget_tree.get_widget("label_filename")
+        if self._media_file.exists():
+            play_button.set_sensitive(True)
+            label.set_text(self._media_file.get_filename())
+        else:
+            play_button.set_sensitive(False)
+            label.set_text("")
+
     def set_filename(self, filename):
         """
         sets the filename
@@ -132,9 +161,8 @@ class PlayerWindow(object):
         - filename
           filename to set
         """
-        widget = self._widget_tree.get_widget("label_filename")
-        widget.set_text(filename)
-        print filename
+        self._media_file = MediaFile(filename)
+        self.update_widgets()
 
     def on_open(self, widget):
         """
@@ -143,7 +171,20 @@ class PlayerWindow(object):
         - widget
           widget that triggered the event
         """
-        print "on_open()"
+        title = "Choose Audio file"
+        action = gtk.FILE_CHOOSER_ACTION_OPEN
+        buttons = ( gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL, gtk.STOCK_OPEN, gtk.RESPONSE_OK)
+        chooser = gtk.FileChooserDialog(title, None, action, buttons)
+        chooser.set_default_response(gtk.RESPONSE_OK)
+        filefilter = gtk.FileFilter()
+        filefilter.set_name("Audio file")
+        filefilter.add_pattern("*.mp3")
+        filefilter.add_pattern("*.ogg")
+        chooser.add_filter(filefilter)
+        response = chooser.run()
+        if response == gtk.RESPONSE_OK:
+            self.set_filename(chooser.get_filename())
+        chooser.destroy()
 
     def on_play_stop(self, widget):
         """
@@ -171,7 +212,7 @@ class PlayerWindow(object):
           widget that triggered the event
         """
         print "on_quit()"
-
+        gtk.main_quit()
 
 if __name__ == "__main__":
     # gtk.gdk.threads_init()
