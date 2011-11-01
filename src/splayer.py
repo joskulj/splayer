@@ -17,11 +17,17 @@
 import gtk
 import gtk.gdk
 import gtk.glade
+import gobject
 import os
 import os.path
+import pygtk
+import pygst
+pygst.require("0.10")
+import gst
 import sys
 import threading
 import time
+
 
 class MediaFile(object):
     """
@@ -35,6 +41,7 @@ class MediaFile(object):
         - filename
           filename of the media file
         """
+        self._player = None
         self._playing = False
         if filename != None:
             if os.path.isfile(filename):
@@ -56,6 +63,13 @@ class MediaFile(object):
         - filename of the media file
         """
         return self._filename
+
+    def get_uri(self):
+        """
+        Returns:
+        - uri of the media file
+        """
+        return "file://" + self._path
 
     def get_status_path(self, filename, directory):
         """
@@ -92,11 +106,25 @@ class MediaFile(object):
         """
         return self._playing
 
-    def play(self):
+    def play(self, player):
         """
         plays the file
+        Parameters:
+        - player
+          GStreamer player to use
         """
-        pass
+        self._player = player
+        self._player.set_property("uri", self.get_uri())
+        self._player.set_state(gst.STATE_PLAYING)
+        self._playing = True
+
+    def stop(self):
+        """
+        stops playing the file
+        """
+        self._player.set_state(gst.STATE_NULL)
+        self._player = None
+        self._playing = False
 
     def get_status(self):
         """
@@ -120,7 +148,13 @@ class PlayerWindow(object):
         self._media_file = MediaFile(None)
         self._widget_tree = self.init_widget_tree()
         self.update_widgets()
- 
+        self._player = gst.element_factory_make("playbin2", "player")
+        fakesink = gst.element_factory_make("fakesink", "fakesink")
+        self._player.set_property("video-sink", fakesink)
+        bus = self._player.get_bus()
+        bus.add_signal_watch()
+        bus.connect("message", self.on_message)
+
     def init_widget_tree(self):
         """
         initializes the widget tree
@@ -149,6 +183,10 @@ class PlayerWindow(object):
         label = self._widget_tree.get_widget("label_filename")
         if self._media_file.exists():
             play_button.set_sensitive(True)
+            if self._media_file.is_playing():
+                play_button.set_label("_Stop")
+            else:
+                play_button.set_label("_Play")
             label.set_text(self._media_file.get_filename())
         else:
             play_button.set_sensitive(False)
@@ -163,6 +201,16 @@ class PlayerWindow(object):
         """
         self._media_file = MediaFile(filename)
         self.update_widgets()
+
+    def on_message(self, bus, message):
+        """
+        handles GStreamer events
+        - bus
+          bus to listen
+        - message
+          message to handle
+        """
+        pass
 
     def on_open(self, widget):
         """
@@ -193,7 +241,11 @@ class PlayerWindow(object):
         - widget
           widget that triggered the event
         """
-        print "on_play_stop()"
+        if self._media_file.is_playing():
+            self._media_file.stop()
+        else:
+            self._media_file.play(self._player)
+        self.update_widgets()
 
     def on_reset(self, widget):
         """
