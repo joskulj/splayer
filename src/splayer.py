@@ -28,6 +28,7 @@ import sys
 import threading
 import time
 
+from threading import Thread
 
 class MediaFile(object):
     """
@@ -139,7 +140,101 @@ class MediaFile(object):
     def remove_status(self):
         pass
 
+class MediaPlayer(object):
+    """
+    class to play a media file
+    """
+
+    def __init__(self, filename):
+        """
+        creates an instance
+        Parameters:
+        - filename
+          file to play
+        """
+        self._filename = filename
+        self._pipeline = None
+        if self._filename.lower().endswith("mp3"):
+            self._pipeline = self.create_mp3_pipeline()
+        if self._filename.lower().endswith("ogg"):
+            self._pipeline = self.create_ogg_pipeline()
+        if not self._pipeline:
+            print "media file not supported"
+
+    def create_mp3_pipeline(self):
+        """
+        creates a pipeline to play MP3 files
+        """
+        pipeline = gst.Pipeline("PlayerPipeline")
+        source = gst.element_factory_make("filesrc", "file-source")
+        source.set_property("location", self._filename)
+        pipeline.add(source)
+        decoder = gst.element_factory_make("mad", "decoder")
+        pipeline.add(decoder)
+        source.link(decoder)
+        converter = gst.element_factory_make("audioconvert", "converter")
+        pipeline.add(converter)
+        decoder.link(converter)
+        sink = gst.element_factory_make("autoaudiosink", "audio-output")
+        pipeline.add(sink)
+        decoder.link(sink)
+        return pipeline
+
+    def create_ogg_pipeline(self):
+        """
+        creates a pipeline to play ogg files
+        """
+        pipeline = gst.Pipeline("PlayerPipeline")
+        source = gst.element_factory_make("filesrc", "file-source")
+        source.set_property("location", self._filename)
+        pipeline.add(source)
+        demuxer = gst.element_factory_make("oggdemux", "demuxer")
+        # implement demuxer callback (?)
+        pipeline.add(demuxer)
+        source.link(demuxer)
+        decoder = gst.element_factory_make("vorbisdec", "vorbis-decoder")
+        pipeline.add(decoder)
+        demuxer.link(decoder)
+        converter = gst.element_factory_make("audioconvert", "converter")
+        pipeline.add(converter)
+        decoder.link(converter)
+        sink = gst.element_factory_make("autoaudiosink", "audio-output")
+        pipeline.add(sink)
+        decoder.link(sink)
+        return pipeline
+
+    def play(self, startpos=None):
+        """
+        starts playing the media file
+        Parameter
+        - startpos (optional)
+          position to start playing
+        """
+        if self._pipeline:
+            self._pipeline.set_state(gst.STATE_PLAYING)
+            if startpos:
+                time.sleep(0.2)
+                self._pipeline.seek_simple(gst.FORMAT_TIME, \
+                    gst.SEEK_FLAG_FLUSH, startpos)
+
+    def stop(self):
+        """
+        stops playing the media file
+        """
+        if self._pipeline:
+            self._pipeline.set_state(gst.STATE_NULL)
+
+    def get_position(self):
+        """
+        Returns:
+        - current playing position
+        """
+        return self._pipeline.query_position(gst.FORMAT_TIME, None)[0]
+
 class PlayerWindow(object):
+    """
+    GTK Window for the player
+    """
 
     def __init__(self):
         """
@@ -147,6 +242,7 @@ class PlayerWindow(object):
         """
         self._media_file = MediaFile(None)
         self._widget_tree = self.init_widget_tree()
+        self._thread = None
         self.update_widgets()
         self._player = gst.element_factory_make("playbin2", "player")
         fakesink = gst.element_factory_make("fakesink", "fakesink")
@@ -265,6 +361,71 @@ class PlayerWindow(object):
         """
         print "on_quit()"
         gtk.main_quit()
+
+class PlayerWindowThread(object):
+    """
+    thread to syncronize the files
+    """
+
+    def __init__(self):
+        """
+        creates an instance
+        """
+        self._state = STATE_NOT_STARTED
+        self._sleep_interval = 10
+
+    def is_running(self):
+        """
+        Returns:
+        - True:  server is running
+        - False: server is not running
+        """
+        return self._state != STATE_STOPPING
+
+    def stop(self):
+        """
+        signals the thread to stop
+        """
+        self._state = STATE_STOPPING
+
+    def start_pausing(self):
+        """
+        signals the thread to pause
+        """
+        self._state = STATE_PAUSING
+
+    def stop_pausing(self):
+        """
+        signals the thread to stop pausing
+        """
+        self._state = STATE_RUNNING
+
+    def start(self):
+        """
+        starts the thread
+        """
+        self._state = STATE_RUNNING
+        while self.is_running():
+            print "loop entered."
+            if self._state == STATE_RUNNING:
+                print "SyncThread running."
+            if self._state == STATE_PAUSING:
+                print "SyncThread paused."
+            print "sleep"
+            time.sleep(self._sleep_interval)
+            print "wake up"
+        print "SyncThread stopped."
+        #if self._state == STATE_NOT_STARTED:
+        #    self._state = STATE_RUNNING
+        #    if self._state != STATE_STOPPING:
+        #        # TODO: implement file synchronization
+        #        if self._state == STATE_RUNNING:
+        #            print "DaemonSyncThread running"
+        #        if self._state == STATE_PAUSING:
+        #            print "DaemonSyncThread paused"
+        #        # time.sleep(self._sleep_interval)
+        #    print "SyncThread stopped."
+
 
 if __name__ == "__main__":
     # gtk.gdk.threads_init()
