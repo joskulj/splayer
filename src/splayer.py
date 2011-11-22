@@ -15,7 +15,6 @@
 # GNU General Public License for more details.
 
 import gtk
-import gtk.gdk
 import gtk.glade
 import gobject
 import os
@@ -29,6 +28,8 @@ import threading
 import time
 
 from threading import Thread
+
+gtk.gdk.threads_init()
 
 class MediaFile(object):
     """
@@ -240,6 +241,7 @@ class PlayerWindow(object):
         """
         creates an instance
         """
+        self._running = True
         self._media_file = MediaFile(None)
         self._widget_tree = self.init_widget_tree()
         self._thread = None
@@ -250,6 +252,9 @@ class PlayerWindow(object):
         bus = self._player.get_bus()
         bus.add_signal_watch()
         bus.connect("message", self.on_message)
+        self._update_thread = Thread(target=self.update_state)
+        self._update_thread.start()
+
 
     def init_widget_tree(self):
         """
@@ -264,10 +269,6 @@ class PlayerWindow(object):
         , "on_open" : self.on_open
         , "on_play_stop" : self.on_play_stop
         , "on_quit" : self.on_quit }
-        # , "on_add_directory" : self.on_add_directory
-        # , "on_remove_directory" : self.on_remove_directory
-        # , "on_synchronize" : self.on_synchronize
-        # , "on_exit" : self.on_exit }
         widget_tree.signal_autoconnect(dic)
         return widget_tree
 
@@ -287,6 +288,16 @@ class PlayerWindow(object):
         else:
             play_button.set_sensitive(False)
             label.set_text("")
+
+    def update_state(self):
+        """
+        updates the state
+        """
+        while self._running:
+            if self._media_file.is_playing():
+                print "playing"
+            time.sleep(1)
+        print "update stop"
 
     def set_filename(self, filename):
         """
@@ -339,8 +350,11 @@ class PlayerWindow(object):
         """
         if self._media_file.is_playing():
             self._media_file.stop()
+            self._thread.stop()
         else:
             self._media_file.play(self._player)
+            self._thread = PlayerWindowThread(self._media_file, self)
+            self._thread.start()
         self.update_widgets()
 
     def on_reset(self, widget):
@@ -360,75 +374,12 @@ class PlayerWindow(object):
           widget that triggered the event
         """
         print "on_quit()"
+        self._running = False
+        # wait for update thread to stop
+        time.sleep(2)
         gtk.main_quit()
 
-class PlayerWindowThread(object):
-    """
-    thread to syncronize the files
-    """
-
-    def __init__(self):
-        """
-        creates an instance
-        """
-        self._state = STATE_NOT_STARTED
-        self._sleep_interval = 10
-
-    def is_running(self):
-        """
-        Returns:
-        - True:  server is running
-        - False: server is not running
-        """
-        return self._state != STATE_STOPPING
-
-    def stop(self):
-        """
-        signals the thread to stop
-        """
-        self._state = STATE_STOPPING
-
-    def start_pausing(self):
-        """
-        signals the thread to pause
-        """
-        self._state = STATE_PAUSING
-
-    def stop_pausing(self):
-        """
-        signals the thread to stop pausing
-        """
-        self._state = STATE_RUNNING
-
-    def start(self):
-        """
-        starts the thread
-        """
-        self._state = STATE_RUNNING
-        while self.is_running():
-            print "loop entered."
-            if self._state == STATE_RUNNING:
-                print "SyncThread running."
-            if self._state == STATE_PAUSING:
-                print "SyncThread paused."
-            print "sleep"
-            time.sleep(self._sleep_interval)
-            print "wake up"
-        print "SyncThread stopped."
-        #if self._state == STATE_NOT_STARTED:
-        #    self._state = STATE_RUNNING
-        #    if self._state != STATE_STOPPING:
-        #        # TODO: implement file synchronization
-        #        if self._state == STATE_RUNNING:
-        #            print "DaemonSyncThread running"
-        #        if self._state == STATE_PAUSING:
-        #            print "DaemonSyncThread paused"
-        #        # time.sleep(self._sleep_interval)
-        #    print "SyncThread stopped."
-
-
 if __name__ == "__main__":
-    # gtk.gdk.threads_init()
     window = PlayerWindow()
     if len(sys.argv) > 1:
         window.set_filename(sys.argv[1])
