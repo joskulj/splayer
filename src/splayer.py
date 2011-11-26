@@ -73,6 +73,13 @@ class MediaFile(object):
         """
         return "file://" + self._path
 
+    def get_path(self):
+        """
+        Returns:
+        - path of the media file
+        """
+        return self._path
+
     def get_status_path(self, filename, directory):
         """
         returns the path of the status file
@@ -98,34 +105,6 @@ class MediaFile(object):
         if self._path != None:
             result = os.path.isfile(self._path)
         return result
-
-    def is_playing(self):
-        """
-        checks if the file is currently played
-        Returns:
-        - True:  file is played
-        - False: file is not played
-        """
-        return self._playing
-
-    def play(self, player):
-        """
-        plays the file
-        Parameters:
-        - player
-          GStreamer player to use
-        """
-        self._player = player
-        self._player.set_property("uri", self.get_uri())
-        self._player.set_state(gst.STATE_PLAYING)
-        self._playing = True
-
-    def stop(self):
-        """
-        stops playing the file
-        """
-        self._player.set_state(gst.STATE_NULL)
-        self._player = None
         self._playing = False
 
     def get_status(self):
@@ -133,7 +112,10 @@ class MediaFile(object):
         Returns:
         - current position from the status file
         """
-        return 16.0
+        result = 0
+        if self._player != None:
+            result = self._player.query_position(gst.FORMAT_TIME, None)[0]
+        return result
 
     def update_status(self, duration):
         pass
@@ -146,63 +128,19 @@ class MediaPlayer(object):
     class to play a media file
     """
 
-    def __init__(self, filename):
+    def __init__(self, mediafile):
         """
         creates an instance
         Parameters:
-        - filename
-          file to play
+        - mediafile
+          media file to play
         """
-        self._filename = filename
+        self._mediafile = mediafile
         self._pipeline = None
-        if self._filename.lower().endswith("mp3"):
-            self._pipeline = self.create_mp3_pipeline()
-        if self._filename.lower().endswith("ogg"):
-            self._pipeline = self.create_ogg_pipeline()
-        if not self._pipeline:
-            print "media file not supported"
-
-    def create_mp3_pipeline(self):
-        """
-        creates a pipeline to play MP3 files
-        """
-        pipeline = gst.Pipeline("PlayerPipeline")
-        source = gst.element_factory_make("filesrc", "file-source")
-        source.set_property("location", self._filename)
-        pipeline.add(source)
-        decoder = gst.element_factory_make("mad", "decoder")
-        pipeline.add(decoder)
-        source.link(decoder)
-        converter = gst.element_factory_make("audioconvert", "converter")
-        pipeline.add(converter)
-        decoder.link(converter)
-        sink = gst.element_factory_make("autoaudiosink", "audio-output")
-        pipeline.add(sink)
-        decoder.link(sink)
-        return pipeline
-
-    def create_ogg_pipeline(self):
-        """
-        creates a pipeline to play ogg files
-        """
-        pipeline = gst.Pipeline("PlayerPipeline")
-        source = gst.element_factory_make("filesrc", "file-source")
-        source.set_property("location", self._filename)
-        pipeline.add(source)
-        demuxer = gst.element_factory_make("oggdemux", "demuxer")
-        # implement demuxer callback (?)
-        pipeline.add(demuxer)
-        source.link(demuxer)
-        decoder = gst.element_factory_make("vorbisdec", "vorbis-decoder")
-        pipeline.add(decoder)
-        demuxer.link(decoder)
-        converter = gst.element_factory_make("audioconvert", "converter")
-        pipeline.add(converter)
-        decoder.link(converter)
-        sink = gst.element_factory_make("autoaudiosink", "audio-output")
-        pipeline.add(sink)
-        decoder.link(sink)
-        return pipeline
+        self._pipeline = gst.element_factory_make("playbin2", "player")
+        fakesink = gst.element_factory_make("fakesink", "fakesink")
+        self._pipeline.set_property("video-sink", fakesink)
+        self._pipeline.set_property("uri", mediafile.get_uri())
 
     def play(self, startpos=None):
         """
@@ -225,12 +163,25 @@ class MediaPlayer(object):
         if self._pipeline:
             self._pipeline.set_state(gst.STATE_NULL)
 
+    def get_duration(self):
+        """
+        Returns:
+        - duration of the stream
+        """
+        result = -1
+        if self._pipeline:
+           result = self._pipeline.query_duration(gst.FORMAT_TIME, None)[0]
+        return result
+
     def get_position(self):
         """
         Returns:
-        - current playing position
+        - current position
         """
-        return self._pipeline.query_position(gst.FORMAT_TIME, None)[0]
+        result = -1
+        if self._pipeline:
+            result = self._pipeline.query_position(gst.FORMAT_TIME, None)[0]
+        return result
 
 class PlayerWindow(object):
     """
@@ -244,17 +195,10 @@ class PlayerWindow(object):
         self._running = True
         self._media_file = MediaFile(None)
         self._widget_tree = self.init_widget_tree()
-        self._thread = None
+        self._player = None
         self.update_widgets()
-        self._player = gst.element_factory_make("playbin2", "player")
-        fakesink = gst.element_factory_make("fakesink", "fakesink")
-        self._player.set_property("video-sink", fakesink)
-        bus = self._player.get_bus()
-        bus.add_signal_watch()
-        bus.connect("message", self.on_message)
         self._update_thread = Thread(target=self.update_state)
         self._update_thread.start()
-
 
     def init_widget_tree(self):
         """
@@ -280,7 +224,7 @@ class PlayerWindow(object):
         label = self._widget_tree.get_widget("label_filename")
         if self._media_file.exists():
             play_button.set_sensitive(True)
-            if self._media_file.is_playing():
+            if self._player:
                 play_button.set_label("_Stop")
             else:
                 play_button.set_label("_Play")
@@ -294,8 +238,11 @@ class PlayerWindow(object):
         updates the state
         """
         while self._running:
-            if self._media_file.is_playing():
-                print "playing"
+            if self._player:
+                position = self._player.get_position()
+                duration = self._player.get_duration()
+                fraction = float(position) / float(duration)
+                self.set_progress(fraction)
             time.sleep(1)
         print "update stop"
 
@@ -307,7 +254,18 @@ class PlayerWindow(object):
           filename to set
         """
         self._media_file = MediaFile(filename)
+        # TODO: stop and delete media player
         self.update_widgets()
+
+    def set_progress(self, progress):
+        """
+        updates the progress bar
+        Parameters:
+        - progress
+          value between 0.0 and 1.0
+        """
+        widget = self._widget_tree.get_widget("progressbar")
+        widget.set_fraction(progress)
 
     def on_message(self, bus, message):
         """
@@ -348,13 +306,12 @@ class PlayerWindow(object):
         - widget
           widget that triggered the event
         """
-        if self._media_file.is_playing():
-            self._media_file.stop()
-            self._thread.stop()
+        if self._player:
+            # TODO: implement stop to play
+            pass
         else:
-            self._media_file.play(self._player)
-            self._thread = PlayerWindowThread(self._media_file, self)
-            self._thread.start()
+            self._player = MediaPlayer(self._media_file)
+            self._player.play()
         self.update_widgets()
 
     def on_reset(self, widget):
